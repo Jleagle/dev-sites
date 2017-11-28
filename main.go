@@ -1,65 +1,82 @@
 package main
 
 import (
+	"encoding/json"
 	"html/template"
+	"io/ioutil"
 	"log"
 	"net/http"
 	"os"
-	"path"
 	"path/filepath"
-	"runtime"
 	"strings"
 
 	"github.com/go-chi/chi"
+	"github.com/kr/pretty"
 )
 
 func main() {
 
 	r := chi.NewRouter()
 	r.Get("/", listHandler)
-	//r.Get("/logout", logoutHandler)
 
 	// Assets
 	workDir, _ := os.Getwd()
 	filesDir := filepath.Join(workDir, "assets")
 	fileServer(r, "/assets", http.Dir(filesDir))
 
-	log.Fatal(http.ListenAndServe(":8084", r))
+	log.Fatal(http.ListenAndServe(":8085", r))
 }
 
-func returnTemplate(w http.ResponseWriter, r *http.Request, page string, err error) {
+func listHandler(w http.ResponseWriter, r *http.Request) {
 
-	// todo, log errors
-
-	// Get current app path
-	_, file, _, ok := runtime.Caller(0)
-	if !ok {
-		//logger.Err("No caller information")
-	}
-	folder := path.Dir(file)
-
-	// Load templates needed
-	always := []string{
-		folder + "/templates/header.html",
-		folder + "/templates/footer.html",
-		folder + "/templates/" + page + ".html",
-		folder + "/templates/includes/album.html",
-	}
-
-	t, err := template.New("t").ParseFiles(always...)
+	// Get paths
+	file, err := ioutil.ReadFile("./config.json")
 	if err != nil {
-		//logger.ErrExit(err.Error())
+		pretty.Print("error 1:", err)
 	}
 
-	// Write a respone
-	err = t.ExecuteTemplate(w, page, nil)
+	configuration := Configuration{}
+	err = json.Unmarshal(file, &configuration)
 	if err != nil {
-		//logger.ErrExit(err.Error())
+		pretty.Print("error 2:", err)
+	}
+
+	//
+	var projects []Project
+
+	for _, v := range configuration.Folders.PHP {
+
+		files, err := ioutil.ReadDir(v)
+		if err != nil {
+			pretty.Print("error 5:", err)
+		}
+
+		for _, vv := range files {
+
+			project := Project{}
+			project.Path = v + "/" + vv.Name()
+
+			projects = append(projects, project)
+		}
+	}
+
+	// Return a template
+	t, err := template.New("t").ParseFiles("./template.html")
+	if err != nil {
+		pretty.Print("error 3:", err)
+	}
+
+	vars := TemplateVars{}
+	vars.Projects = projects
+
+	pretty.Print(vars)
+
+	err = t.ExecuteTemplate(w, "list", vars)
+	if err != nil {
+		pretty.Print("error 4:", err)
 	}
 }
 
-// FileServer conveniently sets up a http.FileServer handler to serve
-// static files from a http.FileSystem.
 func fileServer(r chi.Router, path string, root http.FileSystem) {
 
 	if strings.ContainsAny(path, "{}*") {
@@ -77,4 +94,21 @@ func fileServer(r chi.Router, path string, root http.FileSystem) {
 	r.Get(path, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		fs.ServeHTTP(w, r)
 	}))
+}
+
+type Configuration struct {
+	Folders FoldersStruct `json:"folders"`
+}
+
+type FoldersStruct struct {
+	Go  []string `json:"go"`
+	PHP []string `json:"php"`
+}
+
+type TemplateVars struct {
+	Projects []Project
+}
+
+type Project struct {
+	Path string
 }
