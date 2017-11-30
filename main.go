@@ -12,6 +12,7 @@ import (
 
 	"github.com/go-chi/chi"
 	"github.com/kr/pretty"
+	"path"
 )
 
 func main() {
@@ -54,7 +55,10 @@ func listHandler(w http.ResponseWriter, r *http.Request) {
 		for _, vv := range files {
 
 			project := Project{}
-			project.Path = v + "/" + vv.Name()
+			project.Path = path.Join(v, vv.Name())
+			project.Folder = vv.Name()
+			project.HasComposer = true
+			project.HasGit = true
 
 			projects = append(projects, project)
 		}
@@ -110,5 +114,8 @@ type TemplateVars struct {
 }
 
 type Project struct {
-	Path string
+	Path        string
+	Folder      string
+	HasComposer bool
+	HasGit      bool
 }
